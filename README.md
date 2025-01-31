@@ -65,5 +65,5 @@ If you want to, throw some cents my way:
 ---
 
 **Note**: Not affiliated with Ubiquiti Inc.  
-**Compatibility**: Tested on UniFi OS 4.0.0+ with a UXG-Max  
+**Compatibility**: Tested on UniFi OS 4.0.0+ with a UCG-Max  
 **License**: MIT
