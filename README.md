@@ -59,11 +59,11 @@ This project builds upon work from:
 - [UCG-Max Temperature Control Reddit Post](https://www.reddit.com/r/Ubiquiti/comments/1fr8xyt/control_the_temperature_of_ucgmax/) - Initial PWM control research and implementation ideas
 
 ## Support
-If you want to,throw some cents my way:
+If you want to, throw some cents my way:
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/H2H719VB0U)
 ---
 
 **Note**: Not affiliated with Ubiquiti Inc.  
-**Compatibility**: Tested on UniFi OS 4.0.0+  
+**Compatibility**: Tested on UniFi OS 4.0.0+ with a UXG-Max  
 **License**: MIT
