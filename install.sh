@@ -29,7 +29,7 @@ cat > /data/fan-control/fan-control.sh <<'EOF'
 ############################################
 
 # Temperature thresholds (°C)
-MIN_TEMP=66
+MIN_TEMP=65
 MAX_TEMP=85
 
 # Fan PWM values
