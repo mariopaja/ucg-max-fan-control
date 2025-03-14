@@ -127,7 +127,7 @@ set_fan_speed() {
                 local adjustment=""
 
                 (( new_speed < optimal )) && {
-                    adjustment="-$LEARNING_RATE (current ${new_speed}pwm < optimal ${optimal}pwm)"
+                    adjustment="-$LEARNING_RATE (current ${new_speed}pwm < optimal ${original_optimal}pwm)"
                     optimal=$(( optimal - LEARNING_RATE ))
                 }
                 (( new_speed > optimal )) && {
@@ -185,7 +185,8 @@ update_fan_state() {
                 TAPER_START=$now
                 set_fan_speed $MIN_PWM
             else
-                static last_avg=0
+                declare -g last_avg  # Global variable
+                last_avg=${last_avg:-0}  # Initialize if not set
                 local temp_delta=$(( avg_temp - last_avg ))
                 if (( ${temp_delta#-} > DEADBAND )); then
                     logger -t fan-control "DEADBAND: Δ=${temp_delta}℃ (threshold=${DEADBAND}℃)"
