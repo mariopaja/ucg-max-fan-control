@@ -3,11 +3,16 @@
 Advanced temperature management for Ubiquiti UCG-Max devices running UniFi OS 4+
 
 ## Features
-- 🛠️ **Four Operational States**: OFF/TAPER/LINEAR/EMERGENCY
-- 📁 **External Configuration**: Modify settings without editing core script
-- 📊 **Adaptive Learning**: Automatically optimizes fan speeds over time
-- 🛡️ **Safety Features**: Gradual speed changes, hardware validation, PID locking
-- 📈 **Detailed Logging**: Full operational history via systemd journal
+- 🎛️ **Four Operational States**: 
+  - **OFF**: Fan disabled (temp < activation threshold)
+  - **TAPER**: Post-cooling minimum speed period
+  - **ACTIVE**: Quadratic response curve (temp ≥ activation threshold)
+  - **EMERGENCY**: Immediate full speed (255 PWM) (critical temps)
+- 🚨 **Emergency Override**: Instant full speed at critical temps
+- 📈 **Quadratic Response**: Progressive cooling curve for optimal noise/performance
+- 🧠 **Adaptive Learning**: Automatic PWM optimization
+- 📉 **Exponential Smoothing**: Noise-resistant temperature tracking
+- 🛡️ **Safety Systems**: Speed limits, thermal protection, hardware validation
 
 ## Installation
 ```bash
@@ -17,19 +22,22 @@ curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/in
 ## Configuration
 Edit `/data/fan-control/config`:
 ```bash
-# Temperature Settings
-MIN_TEMP=60    # Base threshold (°C)
-HYSTERESIS=5   # Activation buffer (°C)
-MAX_TEMP=85    # Emergency threshold (°C)
+# Core Thresholds
+MIN_TEMP=60       # Base activation threshold (°C)
+MAX_TEMP=85       # Emergency threshold (°C)
+HYSTERESIS=5      # Temperature buffer (°C)
 
 # Fan Behavior
-MIN_PWM=55     # Minimum active speed (0-255)
-MAX_PWM=255    # Maximum speed (0-255)
-TAPER_MINS=90  # Cool-down duration (minutes)
-CHECK_INTERVAL=15  # Temperature check frequency (seconds)
+MIN_PWM=55        # Minimum active speed (0-255)
+MAX_PWM=255       # Maximum speed (0-255)
+MAX_PWM_STEP=25   # Maximum speed change per adjustment
 
-# Advanced
-MAX_PWM_STEP=25  # Maximum speed change per adjustment
+# Advanced Tuning
+DEADBAND=2        # Temperature stability threshold (°C)
+ALPHA=75          # Smoothing factor (0-100 raw→smooth)
+LEARNING_RATE=5   # Hourly PWM optimization step size
+TAPER_MINS=90     # Cool-down duration (minutes)
+CHECK_INTERVAL=15 # Temperature check frequency (seconds)
 ```
 
 Apply changes:
@@ -37,36 +45,78 @@ Apply changes:
 systemctl restart fan-control.service
 ```
 
-## Key Operations
-| State       | Temperature Range    | Behavior                          |
-|-------------|----------------------|-----------------------------------|
-| **OFF**     | <65°C (60+5)         | Fan completely disabled           |
-| **TAPER**   | Cooling period       | 55 PWM for configured minutes     |
-| **LINEAR**  | 65°C - 85°C          | Proportional speed adjustment     |
-| **EMERGENCY**| >85°C              | Instant full speed (255 PWM)      |
+## Operational Overview
+| State       | Trigger Condition          | Behavior                          |
+|-------------|----------------------------|-----------------------------------|
+| **OFF**     | <65°C (60+5)               | Fan disabled                      |
+| **TAPER**   | Cooling period             | Minimum speed for configured mins |
+| **ACTIVE**  | 65°C - 85°C                | Quadratic speed response          |
+| **EMERGENCY**| >85°C                     | Immediate full speed (255 PWM)    |
+
+## Monitoring & Logging
+Key operational signals:
+```log
+# Temperature Monitoring
+TEMP: raw=68℃ smooth=65℃ delta=-3℃
+
+# Speed Calculations
+CALC: temp_diff=5℃ range=20℃ speed=100pwm
+
+# State Transitions
+STATE: OFF→ACTIVE (67℃ ≥ 65℃)
+STATE: ACTIVE→TAPER (59℃ ≤ 60℃)
+
+# Speed Changes
+SET: 55→80pwm | Reason: Ramp-up limited: 55→80pwm
+
+# Learning System
+LEARNING: 80→75pwm (-5 current 75pwm < optimal 80pwm)
+
+# System Status
+STATUS: State=ACTIVE | PWM=120 | Temp=72℃
+```
+
+View logs with:
+```bash
+journalctl -u fan-control.service -f          # Live monitoring
+journalctl -u fan-control.service --since "10 minutes ago"  # Recent history
+```
+
+## Technical Implementation
+- **Quadratic Response Curve**:
+  ```math
+  PWM = MIN_PWM + ((temp_diff² × (MAX_PWM - MIN_PWM)) / temp_range²)
+  ```
+  Where:  
+  `temp_diff = current_temp - activation_temp`  
+  `temp_range = MAX_TEMP - activation_temp`
+
+- **Exponential Smoothing**:
+  ```math
+  smoothed_temp = (α × previous_smooth) + ((100 - α) × raw_temp) / 100
+  ```
+  (α configured via ALPHA parameter)
+
+- **Adaptive Learning**:  
+  Hourly adjusts optimal PWM based on thermal performance history
 
 ## Maintenance
 ```bash
-# Live monitoring
-journalctl -u fan-control.service -f
-# Show last 50 entries
-journalctl -u fan-control.service -n 50
+# Service Management
+systemctl status fan-control.service   # Current state
+systemctl restart fan-control.service  # Apply config changes
 
-# Service management
-systemctl status fan-control.service  # Current state
-systemctl restart fan-control.service # Apply config changes
-
-# Full removal
+# Full Removal
 /data/fan-control/uninstall.sh
 ```
 
 ## Credits & Acknowledgments
-- **Heuristic Control Logic**: [Covert-Agenda](https://www.reddit.com/user/Covert-Agenda/)
+- **Thermal Research**: [UCG-Max Thermal Thread](https://www.reddit.com/r/Ubiquiti/comments/1fr8xyt/)
+- **System Integration**: SierraSoftworks service patterns
 - **State Implementation**: fraction995
-- **Initial Research**: [UCG-Max Thermal Thread](https://www.reddit.com/r/Ubiquiti/comments/1fr8xyt/)
-- **Maintenance Patterns**: SierraSoftworks service templates
+- **Control Logic**: [Covert-Agenda](https://www.reddit.com/user/Covert-Agenda/)
 
-[Support Development ☕](https://ko-fi.com/H2H719VB0U)
+[☕Buy me a coffee](https://ko-fi.com/H2H719VB0U)
 
 ---
 
