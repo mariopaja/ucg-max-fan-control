@@ -70,6 +70,9 @@ LAST_PWM=-1
 SMOOTHED_TEMP=50
 LAST_ADJUSTMENT=0
 
+SMOOTHED_TEMP=$(ubnt-systool cputemp | awk '{print int($1)}' || echo 50)
+logger -t fan-control "INIT: Raw=${SMOOTHED_TEMP}℃ | Starting smooth_temp=${SMOOTHED_TEMP}℃"
+
 get_smoothed_temp() {
     local raw_temp=$(ubnt-systool cputemp | awk '{print int($1)}' 2>/dev/null)
     raw_temp=${raw_temp:-50}
