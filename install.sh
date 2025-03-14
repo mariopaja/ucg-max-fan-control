@@ -207,7 +207,8 @@ echo "Uninstallation complete. All components removed."
 EOF
 
 # Install systemd service
-cat > /etc/systemd/system/fan-control.service <<'EOF'
+SERVICE_FILE="/etc/systemd/system/fan-control.service"
+cat > "$SERVICE_FILE" <<EOF
 [Unit]
 Description=UCG-Max Adaptive Fan Controller
 After=network.target
@@ -225,8 +226,19 @@ EOF
 # Set permissions and activate
 chmod +x /data/fan-control/fan-control.sh
 chmod +x /data/fan-control/uninstall.sh
+
+# Reload systemd configuration
 systemctl daemon-reload
-systemctl enable --now fan-control.service
+
+# Smart service management
+if systemctl is-active --quiet fan-control.service; then
+    echo "Service already running - performing hot update"
+    systemctl restart fan-control.service
+    echo "Service successfully updated and restarted"
+else
+    echo "Performing fresh installation"
+    systemctl enable --now fan-control.service
+fi
 
 echo "Installation successful!"
 echo "Configuration: nano /data/fan-control/config"
