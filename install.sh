@@ -111,7 +111,8 @@ set_fan_speed() {
     if [[ "$new_speed" -ne "$LAST_PWM" ]]; then
         echo "$new_speed" > "$FAN_PWM_DEVICE"
         LAST_PWM=$new_speed
-        logger -t fan-control "PWM: ${new_speed} | State: ${CURRENT_STATE}"
+        avg_temp=$(get_smoothed_temp)
+        logger -t fan-control "PWM: ${new_speed} | Current: ${current_temp}℃ | Avg: ${avg_temp}℃ | State: ${CURRENT_STATE}"
     fi
 }
 
