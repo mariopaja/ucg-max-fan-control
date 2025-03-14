@@ -76,7 +76,7 @@ get_smoothed_temp() {
     local previous=$SMOOTHED_TEMP
     SMOOTHED_TEMP=$(( (ALPHA * SMOOTHED_TEMP + (100 - ALPHA) * raw_temp ) / 100 ))
 
-    logger -t fan-control "TEMP: raw=${raw_temp}℃ smooth=${SMOOTHED_TEMP}℃ delta=$((SMOOTHED_TEMP - previous))℃"
+    logger -t fan-control "TEMP:  raw=${raw_temp}℃  smooth=${SMOOTHED_TEMP}℃  delta=$((SMOOTHED_TEMP - previous))℃"
     echo $SMOOTHED_TEMP
 }
 
