@@ -189,12 +189,12 @@ update_fan_state() {
                 last_avg=${last_avg:-0}  # Initialize if not set
                 local temp_delta=$(( avg_temp - last_avg ))
                 if (( ${temp_delta#-} > DEADBAND )); then
-                    logger -t fan-control "DEADBAND: Δ=${temp_delta}℃ (threshold=${DEADBAND}℃)"
+                    logger -t fan-control "DEADBAND: Δ=${temp_delta}℃ ( threshold=${DEADBAND}℃ )"
                     local speed=$(calculate_speed $avg_temp)
                     set_fan_speed $speed
                     last_avg=$avg_temp
                 else
-                    logger -t fan-control "DEADBAND: No change (Δ=${temp_delta}℃)"
+                    logger -t fan-control "DEADBAND: No change ( Δ=${temp_delta}℃ )"
                 fi
             fi
             ;;
