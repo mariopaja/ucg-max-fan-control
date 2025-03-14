@@ -4,69 +4,79 @@ set -e
 # Create directory for fan control
 mkdir -p /data/fan-control
 
-# Install the fan control script
+# Install fan control script
 cat > /data/fan-control/fan-control.sh <<'EOF'
 #!/bin/bash
 ###############################################################################
 # UCG-Max Intelligent Fan Controller
 #
-# Operates in three distinct modes to balance cooling performance and fan longevity
+# Features:
+# - Three operational states (OFF/TAPER/LINEAR)
+# - Configurable through /data/fan-control/config
+# - Safe speed transitions and error resilience
+# - Systemd service integration
 ###############################################################################
 
-###[ USER-CONFIGURABLE SETTINGS ]##############################################
-MIN_PWM=55        # Minimum speed when fan is active (not off)
-MAX_PWM=255       # Absolute maximum fan speed
-MIN_TEMP=60       # Base temperature threshold (°C)
-MAX_TEMP=85       # Critical temperature for full-speed override (°C)
-HYSTERESIS=5      # Temperature buffer to prevent rapid state changes (°C)
-AVG_WINDOW=120    # Temperature averaging period in seconds (2 minutes)
-CHECK_INTERVAL=15 # Time between temperature checks (seconds)
-TAPER_DURATION=$((90*60)) # Cool-down period after high temps (1.5 hours)
-FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1" # Hardware PWM control path
-OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm" # Learned speed storage
-###############################################################################
+###[ CONFIGURATION ]###########################################################
+CONFIG_FILE="/data/fan-control/config"
 
-# System state tracking
-STATE_OFF=0        # Fan completely disabled
-STATE_TAPER=1      # Post-operation cool-down phase
-STATE_LINEAR=2     # Active temperature management
-CURRENT_STATE=$STATE_OFF
-TAPER_START=0      # Timestamp when taper phase began
-LAST_PWM=-1        # Current fan speed value
-declare -a TEMP_LOG # Temperature history for averaging
-FAN_ACTIVATION_TEMP=$((MIN_TEMP + HYSTERESIS)) # Actual turn-on threshold (65°C)
-
-# Initialize PWM learning system
-initialize_optimal_pwm() {
-    # Create learning file with safe defaults if missing
-    if [[ ! -f "$OPTIMAL_PWM_FILE" ]]; then
-        echo "$MIN_PWM" > "$OPTIMAL_PWM_FILE"
-        chmod 644 "$OPTIMAL_PWM_FILE"
-        logger -t fan-control "Created new optimal PWM file with initial value $MIN_PWM"
-    fi
-
-    # Load historical value with sanity checks
-    OPTIMAL_PWM=$(cat "$OPTIMAL_PWM_FILE" 2>/dev/null || echo $MIN_PWM)
-    if (( OPTIMAL_PWM < MIN_PWM )) || (( OPTIMAL_PWM > MAX_PWM )); then
-        OPTIMAL_PWM=$MIN_PWM
-        logger -t fan-control "Reset invalid optimal PWM to safe minimum $MIN_PWM"
-    fi
-    logger -t fan-control "Loaded optimal PWM: $OPTIMAL_PWM"
+# Load defaults if config missing
+source "$CONFIG_FILE" 2>/dev/null || {
+    cat > "$CONFIG_FILE" <<-DEFAULTS
+MIN_PWM=55             # Minimum active fan speed (0-255)
+MAX_PWM=255            # Maximum fan speed (0-255)
+MIN_TEMP=60            # Base threshold (°C)
+MAX_TEMP=85            # Critical temperature (°C)
+HYSTERESIS=5           # Temperature buffer (°C)
+AVG_WINDOW=120         # Rolling average seconds
+CHECK_INTERVAL=15      # Base check interval (seconds)
+TAPER_MINS=90          # Cool-down duration (minutes)
+FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1"
+OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm"
+MAX_PWM_STEP=25        # Max PWM change per adjustment
+DEFAULTS
+    source "$CONFIG_FILE"
 }
 
-# Retrieve current CPU temperature
+# Derived values
+FAN_ACTIVATION_TEMP=$((MIN_TEMP + HYSTERESIS))
+TAPER_DURATION=$((TAPER_MINS * 60))
+
+###[ RUNTIME CHECKS ]##########################################################
+# Validate hardware access
+[[ -w "$FAN_PWM_DEVICE" ]] || {
+    logger -t fan-control "FATAL: PWM device $FAN_PWM_DEVICE not writable"
+    exit 1
+}
+
+# Single instance check
+PID_FILE="/var/run/fan-control.pid"
+if [[ -f "$PID_FILE" ]]; then
+    logger -t fan-control "Service already running (PID $(cat "$PID_FILE"))"
+    exit 1
+fi
+echo $$ > "$PID_FILE"
+trap 'rm -f "$PID_FILE"' EXIT
+
+###[ CORE FUNCTIONALITY ]######################################################
+STATE_OFF=0
+STATE_TAPER=1
+STATE_LINEAR=2
+CURRENT_STATE=$STATE_OFF
+TAPER_START=0
+LAST_PWM=-1
+declare -a TEMP_LOG
+
+# Temperature handling
 get_current_temp() {
     local temp=$(ubnt-systool cputemp | awk '{print int($1)}' 2>/dev/null)
-    echo "${temp:-50}"  # Fallback to safe low temperature on sensor failure
+    echo "${temp:-50}"  # Fallback to safe value
 }
 
-# Calculate smoothed temperature average
 get_smoothed_temp() {
-    local now=$(date +%s)
-    local sum=0 count=0
+    local now=$(date +%s) sum=0 count=0
     declare -a valid_entries
 
-    # Process temperature history
     for entry in "${TEMP_LOG[@]}"; do
         IFS=',' read -r ts temp <<< "$entry"
         if (( now - ts <= AVG_WINDOW )); then
@@ -76,34 +86,36 @@ get_smoothed_temp() {
         fi
     done
 
-    # Update log with only relevant entries
     TEMP_LOG=("${valid_entries[@]}")
-    local avg=$(( count > 0 ? sum / count : 0 ))
-    logger -t fan-control "Calculated rolling average: ${avg}℃ (${count} samples)"
-    echo $avg
+    echo $(( count > 0 ? sum / count : 0 ))
 }
 
-# Apply new fan speed with safety checks
+# Speed control with logging
 set_fan_speed() {
     local new_speed=$1
     local current_temp=$(get_current_temp)
 
-    # Emergency override for critical temps
+    # Emergency override
     if (( current_temp >= MAX_TEMP )); then
         new_speed=$MAX_PWM
-        logger -t fan-control "EMERGENCY OVERRIDE: Current temp ${current_temp}℃ ≥ ${MAX_TEMP}℃"
+        logger -t fan-control "EMERGENCY: Temp ${current_temp}℃ ≥ ${MAX_TEMP}℃"
     fi
 
-    # Only update hardware when necessary
-    if [[ "$new_speed" -ne "$LAST_PWM" ]] && [[ -w "$FAN_PWM_DEVICE" ]]; then
+    # Gradual transitions
+    if (( new_speed > LAST_PWM + MAX_PWM_STEP )); then
+        new_speed=$(( LAST_PWM + MAX_PWM_STEP ))
+    elif (( new_speed < LAST_PWM - MAX_PWM_STEP )); then
+        new_speed=$(( LAST_PWM - MAX_PWM_STEP ))
+    fi
+
+    if [[ "$new_speed" -ne "$LAST_PWM" ]]; then
         echo "$new_speed" > "$FAN_PWM_DEVICE"
         LAST_PWM=$new_speed
-        local avg_temp=$(get_smoothed_temp)
-        logger -t fan-control "Set PWM: $new_speed | State: $CURRENT_STATE | Avg Temp: ${avg_temp}℃"
+        logger -t fan-control "PWM: ${new_speed} | State: ${CURRENT_STATE}"
     fi
 }
 
-# Execute state machine transitions
+###[ STATE MANAGEMENT ]########################################################
 update_fan_state() {
     local avg_temp=$(get_smoothed_temp)
     local now=$(date +%s)
@@ -111,70 +123,59 @@ update_fan_state() {
     case $CURRENT_STATE in
         $STATE_OFF)
             if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
-                logger -t fan-control "ACTIVATING: Avg temp ${avg_temp}℃ ≥ activation threshold ${FAN_ACTIVATION_TEMP}℃"
+                logger -t fan-control "ACTIVATING: Avg ${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP}℃"
                 CURRENT_STATE=$STATE_LINEAR
-                set_fan_speed $OPTIMAL_PWM
-            else
-                logger -t fan-control "Remaining OFF: Avg temp ${avg_temp}℃ < threshold"
+                set_fan_speed $(( $(cat "$OPTIMAL_PWM_FILE") ))
             fi
             ;;
 
         $STATE_TAPER)
             if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
-                logger -t fan-control "EARLY REACTIVATION: Avg temp ${avg_temp}℃ ≥ threshold during taper"
+                logger -t fan-control "REACTIVATING: Avg ${avg_temp}℃"
                 CURRENT_STATE=$STATE_LINEAR
-                set_fan_speed $OPTIMAL_PWM
+                set_fan_speed $(( $(cat "$OPTIMAL_PWM_FILE") ))
             elif (( now - TAPER_START >= TAPER_DURATION )); then
-                logger -t fan-control "TAPER COMPLETE: Returning to OFF state after 90 minutes"
+                logger -t fan-control "TAPER COMPLETE: ${TAPER_MINS} minutes elapsed"
                 CURRENT_STATE=$STATE_OFF
                 set_fan_speed 0
             else
-                local remaining=$(( (TAPER_DURATION - (now - TAPER_START)) / 60 ))
-                logger -t fan-control "TAPER ACTIVE: ${remaining} minutes remaining"
                 set_fan_speed $MIN_PWM
             fi
             ;;
 
         $STATE_LINEAR)
             if (( avg_temp <= MIN_TEMP )); then
-                logger -t fan-control "STABILIZED: Avg temp ${avg_temp}℃ ≤ min threshold ${MIN_TEMP}℃"
+                logger -t fan-control "STABILIZED: Starting ${TAPER_MINS}min taper"
                 CURRENT_STATE=$STATE_TAPER
                 TAPER_START=$now
                 set_fan_speed $MIN_PWM
             else
                 local temp_range=$((MAX_TEMP - FAN_ACTIVATION_TEMP))
-                local speed=$(( OPTIMAL_PWM + (avg_temp - FAN_ACTIVATION_TEMP) * (MAX_PWM - OPTIMAL_PWM) / temp_range ))
+                local speed=$(( (avg_temp - FAN_ACTIVATION_TEMP) * (MAX_PWM - MIN_PWM) / temp_range + MIN_PWM ))
                 speed=$(( speed > MAX_PWM ? MAX_PWM : speed ))
-
-                logger -t fan-control "LINEAR MODE: Temp ${avg_temp}℃ → PWM ${speed}"
                 set_fan_speed $speed
-
-                if (( avg_temp > MIN_TEMP && avg_temp < FAN_ACTIVATION_TEMP + 2 )); then
-                    OPTIMAL_PWM=$(( (OPTIMAL_PWM + speed) / 2 ))
-                    echo "$OPTIMAL_PWM" > "${OPTIMAL_PWM_FILE}.tmp"
-                    mv "${OPTIMAL_PWM_FILE}.tmp" "$OPTIMAL_PWM_FILE"
-                    logger -t fan-control "ADJUSTED OPTIMAL PWM: ${OPTIMAL_PWM} (previous: $(( (OPTIMAL_PWM*2 - speed) )) )"
-                fi
             fi
             ;;
     esac
 }
 
-# Main execution flow
-initialize_optimal_pwm
-initial_temp=$(get_smoothed_temp)
-logger -t fan-control "Service starting | Initial temp: ${initial_temp}℃ | Optimal PWM: ${OPTIMAL_PWM}"
+###[ MAIN EXECUTION ]##########################################################
+# Initialize optimal PWM
+[[ -f "$OPTIMAL_PWM_FILE" ]] || echo "$MIN_PWM" > "$OPTIMAL_PWM_FILE"
+OPTIMAL_PWM=$(cat "$OPTIMAL_PWM_FILE")
 
+logger -t fan-control "Service starting | Optimal PWM: $OPTIMAL_PWM"
+
+# Initial state
+initial_temp=$(get_smoothed_temp)
 if (( initial_temp >= FAN_ACTIVATION_TEMP )); then
-    logger -t fan-control "HOT START: Beginning in LINEAR state"
     CURRENT_STATE=$STATE_LINEAR
     set_fan_speed $OPTIMAL_PWM
 else
-    logger -t fan-control "COLD START: Beginning in OFF state"
     set_fan_speed 0
 fi
 
-# Continuous operation loop
+# Main loop
 while true; do
     TEMP_LOG+=("$(date +%s),$(get_current_temp)")
     update_fan_state
@@ -182,26 +183,30 @@ while true; do
 done
 EOF
 
-# Create uninstall script in same directory
+# Create uninstall script
 cat > /data/fan-control/uninstall.sh <<'EOF'
 #!/bin/sh
 set -e
 
+# Stop and disable service
 systemctl stop fan-control.service 2>/dev/null || true
 systemctl disable fan-control.service 2>/dev/null || true
+
+# Remove system files
 rm -f /etc/systemd/system/fan-control.service
+rm -f /var/run/fan-control.pid
+
+# Remove data files
 rm -rf /data/fan-control
+
+# Reload systemd
 systemctl daemon-reload
 
-echo "Uninstallation complete. Fan control removed."
+echo "Uninstallation complete. All components removed."
 EOF
 
-# Set execute permissions
-chmod +x /data/fan-control/fan-control.sh
-chmod +x /data/fan-control/uninstall.sh
-
 # Install systemd service
-cat > /etc/systemd/system/fan-control.service <<EOF
+cat > /etc/systemd/system/fan-control.service <<'EOF'
 [Unit]
 Description=UCG-Max Adaptive Fan Controller
 After=network.target
@@ -216,8 +221,12 @@ RestartSec=5
 WantedBy=multi-user.target
 EOF
 
+# Set permissions and activate
+chmod +x /data/fan-control/fan-control.sh
+chmod +x /data/fan-control/uninstall.sh
 systemctl daemon-reload
 systemctl enable --now fan-control.service
 
-echo "Installation complete. Fan control service is now active."
-echo "Uninstall script: /data/fan-control/uninstall.sh"
+echo "Installation successful!"
+echo "Configuration: nano /data/fan-control/config"
+echo "Status check: journalctl -u fan-control.service -f"

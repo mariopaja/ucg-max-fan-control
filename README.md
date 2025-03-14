@@ -1,39 +1,35 @@
-# UCG-Max Dynamic Fan Control
+# UCG-Max Intelligent Fan Control
 
-Temperature-based fan control solution for Ubiquiti UCG-Max devices running UniFi OS 4+.
+Advanced temperature management for Ubiquiti UCG-Max devices running UniFi OS 4+
 
 ## Features
-- 🎛️ Four-state PWM control (OFF/TAPER/LINEAR/EMERGENCY)
-- 🌡️ 2-minute rolling temperature average
-- ⏲️ 90-minute cool-down period
-- 🔄 Self-learning optimal speeds
-- 🚨 Instant full-speed emergency override
+- 🛠️ **Four Operational States**: OFF/TAPER/LINEAR/EMERGENCY
+- 📁 **External Configuration**: Modify settings without editing core script
+- 📊 **Adaptive Learning**: Automatically optimizes fan speeds over time
+- 🛡️ **Safety Features**: Gradual speed changes, hardware validation, PID locking
+- 📈 **Detailed Logging**: Full operational history via systemd journal
 
 ## Installation
 ```bash
 curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/install.sh | sh
 ```
 
-## Usage
-The service auto-starts and handles:
-- **OFF** (<65°C avg): Fan completely off
-- **TAPER** (90min): Minimum speed after cooling
-- **LINEAR** (65-85°C): Smart speed scaling
-- **EMERGENCY** (>85°C): Full blast instantly
-
 ## Configuration
-Edit `/data/fan-control/fan-control.sh`:
+Edit `/data/fan-control/config`:
 ```bash
-# Temperature logic
+# Temperature Settings
 MIN_TEMP=60    # Base threshold (°C)
-HYSTERESIS=5   # Buffer zone (°C) -> fan activates at 65°C (60+5)
+HYSTERESIS=5   # Activation buffer (°C)
 MAX_TEMP=85    # Emergency threshold (°C)
 
-# Fan behavior
-MIN_PWM=55     # Minimum active speed
-MAX_PWM=255    # Maximum speed
-TAPER_DURATION=$((90*60))  # Cool-down period (seconds)
-CHECK_INTERVAL=15          # Check every X seconds
+# Fan Behavior
+MIN_PWM=55     # Minimum active speed (0-255)
+MAX_PWM=255    # Maximum speed (0-255)
+TAPER_MINS=90  # Cool-down duration (minutes)
+CHECK_INTERVAL=15  # Temperature check frequency (seconds)
+
+# Advanced
+MAX_PWM_STEP=25  # Maximum speed change per adjustment
 ```
 
 Apply changes:
@@ -41,32 +37,39 @@ Apply changes:
 systemctl restart fan-control.service
 ```
 
-## Uninstall
-```bash
-/data/fan-control/uninstall.sh
-```
+## Key Operations
+| State       | Temperature Range    | Behavior                          |
+|-------------|----------------------|-----------------------------------|
+| **OFF**     | <65°C (60+5)         | Fan completely disabled           |
+| **TAPER**   | Cooling period       | 55 PWM for configured minutes     |
+| **LINEAR**  | 65°C - 85°C          | Proportional speed adjustment     |
+| **EMERGENCY**| >85°C              | Instant full speed (255 PWM)      |
 
-## Verify
+## Maintenance
 ```bash
-# Follow live logs
+# Live monitoring
 journalctl -u fan-control.service -f
-
 # Show last 50 entries
 journalctl -u fan-control.service -n 50
 
-# Filter by priority
-journalctl -u fan-control.service -p info
+# Service management
+systemctl status fan-control.service  # Current state
+systemctl restart fan-control.service # Apply config changes
+
+# Full removal
+/data/fan-control/uninstall.sh
 ```
 
-## Credits
-- [Covert-Agenda](https://www.reddit.com/user/Covert-Agenda/) for heuristic control logic
-- fraction995 for three-state implementation
-- Initial research from [UCG-Max Reddit thread](https://www.reddit.com/r/Ubiquiti/comments/1fr8xyt/control_the_temperature_of_ucgmax/)
+## Credits & Acknowledgments
+- **Heuristic Control Logic**: [Covert-Agenda](https://www.reddit.com/user/Covert-Agenda/)
+- **State Implementation**: fraction995
+- **Initial Research**: [UCG-Max Thermal Thread](https://www.reddit.com/r/Ubiquiti/comments/1fr8xyt/)
+- **Maintenance Patterns**: SierraSoftworks service templates
 
-[☕ Buy me a coffee](https://ko-fi.com/H2H719VB0U)
+[Support Development ☕](https://ko-fi.com/H2H719VB0U)
 
 ---
 
-**Note**: Unofficial project - Not affiliated with Ubiquiti  
-**Compatibility**: UniFi OS 4.0.0+ on UCG-Max  
+**Disclaimer**: Community project - Not affiliated with Ubiquiti Inc.  
+**Compatibility**: Verified on UniFi OS 4.0.0+ (UCG-Max)  
 **License**: MIT
