@@ -76,7 +76,7 @@ get_smoothed_temp() {
     local previous=$SMOOTHED_TEMP
     SMOOTHED_TEMP=$(( (ALPHA * SMOOTHED_TEMP + (100 - ALPHA) * raw_temp ) / 100 ))
 
-    logger -t fan-control "TEMP:  raw=${raw_temp}℃  smooth=${SMOOTHED_TEMP}℃  delta=$((SMOOTHED_TEMP - previous))℃"
+    logger -t fan-control "TEMP:  RAW=${raw_temp}℃ | SMOOTH=${SMOOTHED_TEMP}℃ | DELTA=$((SMOOTHED_TEMP - previous))℃"
     echo $SMOOTHED_TEMP
 }
 
@@ -90,7 +90,7 @@ calculate_speed() {
     speed=$(( speed + MIN_PWM ))
     speed=$(( speed > MAX_PWM ? MAX_PWM : speed ))
 
-    logger -t fan-control "CALC: temp_diff=${temp_diff}℃ range=${temp_range}℃ speed=${speed}pwm"
+    logger -t fan-control "CALC: temp_diff=${temp_diff}℃ | range=${temp_range}℃ | speed=${speed}pwm"
     echo $speed
 }
 
@@ -189,12 +189,12 @@ update_fan_state() {
                 last_avg=${last_avg:-0}  # Initialize if not set
                 local temp_delta=$(( avg_temp - last_avg ))
                 if (( ${temp_delta#-} > DEADBAND )); then
-                    logger -t fan-control "DEADBAND: Δ=${temp_delta}℃ ( threshold=${DEADBAND}℃ )"
+                    logger -t fan-control "DEADBAND:  Δ=${temp_delta}℃ | (threshold=${DEADBAND}℃)"
                     local speed=$(calculate_speed $avg_temp)
                     set_fan_speed $speed
                     last_avg=$avg_temp
                 else
-                    logger -t fan-control "DEADBAND: No change ( Δ=${temp_delta}℃ )"
+                    logger -t fan-control "DEADBAND:  No change Δ=${temp_delta}℃"
                 fi
             fi
             ;;
