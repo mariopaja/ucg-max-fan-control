@@ -42,11 +42,16 @@ initialize_optimal_pwm() {
     if [[ ! -f "$OPTIMAL_PWM_FILE" ]]; then
         echo "$MIN_PWM" > "$OPTIMAL_PWM_FILE"
         chmod 644 "$OPTIMAL_PWM_FILE"
+        logger -t fan-control "Created new optimal PWM file with initial value $MIN_PWM"
     fi
 
     # Load historical value with sanity checks
     OPTIMAL_PWM=$(cat "$OPTIMAL_PWM_FILE" 2>/dev/null || echo $MIN_PWM)
-    (( OPTIMAL_PWM < MIN_PWM || OPTIMAL_PWM > MAX_PWM )) && OPTIMAL_PWM=$MIN_PWM
+    if (( OPTIMAL_PWM < MIN_PWM )) || (( OPTIMAL_PWM > MAX_PWM )); then
+        OPTIMAL_PWM=$MIN_PWM
+        logger -t fan-control "Reset invalid optimal PWM to safe minimum $MIN_PWM"
+    fi
+    logger -t fan-control "Loaded optimal PWM: $OPTIMAL_PWM"
 }
 
 # Retrieve current CPU temperature
@@ -73,7 +78,9 @@ get_smoothed_temp() {
 
     # Update log with only relevant entries
     TEMP_LOG=("${valid_entries[@]}")
-    (( count > 0 )) && echo $(( sum / count )) || echo 0
+    local avg=$(( count > 0 ? sum / count : 0 ))
+    logger -t fan-control "Calculated rolling average: ${avg}℃ (${count} samples)"
+    echo $avg
 }
 
 # Apply new fan speed with safety checks
@@ -84,12 +91,15 @@ set_fan_speed() {
     # Emergency override for critical temps
     if (( current_temp >= MAX_TEMP )); then
         new_speed=$MAX_PWM
+        logger -t fan-control "EMERGENCY OVERRIDE: Current temp ${current_temp}℃ ≥ ${MAX_TEMP}℃"
     fi
 
     # Only update hardware when necessary
     if [[ "$new_speed" -ne "$LAST_PWM" ]] && [[ -w "$FAN_PWM_DEVICE" ]]; then
         echo "$new_speed" > "$FAN_PWM_DEVICE"
         LAST_PWM=$new_speed
+        local avg_temp=$(get_smoothed_temp)
+        logger -t fan-control "Set PWM: $new_speed | State: $CURRENT_STATE | Avg Temp: ${avg_temp}℃"
     fi
 }
 
@@ -100,46 +110,50 @@ update_fan_state() {
 
     case $CURRENT_STATE in
         $STATE_OFF)
-            # Activate when sustained temp reaches 65°C
             if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
+                logger -t fan-control "ACTIVATING: Avg temp ${avg_temp}℃ ≥ activation threshold ${FAN_ACTIVATION_TEMP}℃"
                 CURRENT_STATE=$STATE_LINEAR
                 set_fan_speed $OPTIMAL_PWM
+            else
+                logger -t fan-control "Remaining OFF: Avg temp ${avg_temp}℃ < threshold"
             fi
             ;;
 
         $STATE_TAPER)
             if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
-                # Resume active cooling
+                logger -t fan-control "EARLY REACTIVATION: Avg temp ${avg_temp}℃ ≥ threshold during taper"
                 CURRENT_STATE=$STATE_LINEAR
                 set_fan_speed $OPTIMAL_PWM
             elif (( now - TAPER_START >= TAPER_DURATION )); then
-                # Complete cool-down cycle
+                logger -t fan-control "TAPER COMPLETE: Returning to OFF state after 90 minutes"
                 CURRENT_STATE=$STATE_OFF
                 set_fan_speed 0
             else
-                # Maintain minimum speed during taper
+                local remaining=$(( (TAPER_DURATION - (now - TAPER_START)) / 60 ))
+                logger -t fan-control "TAPER ACTIVE: ${remaining} minutes remaining"
                 set_fan_speed $MIN_PWM
             fi
             ;;
 
         $STATE_LINEAR)
             if (( avg_temp <= MIN_TEMP )); then
-                # Begin cool-down phase
+                logger -t fan-control "STABILIZED: Avg temp ${avg_temp}℃ ≤ min threshold ${MIN_TEMP}℃"
                 CURRENT_STATE=$STATE_TAPER
                 TAPER_START=$now
                 set_fan_speed $MIN_PWM
             else
-                # Calculate proportional speed (65-85°C range)
                 local temp_range=$((MAX_TEMP - FAN_ACTIVATION_TEMP))
                 local speed=$(( OPTIMAL_PWM + (avg_temp - FAN_ACTIVATION_TEMP) * (MAX_PWM - OPTIMAL_PWM) / temp_range ))
                 speed=$(( speed > MAX_PWM ? MAX_PWM : speed ))
+
+                logger -t fan-control "LINEAR MODE: Temp ${avg_temp}℃ → PWM ${speed}"
                 set_fan_speed $speed
 
-                # Refine optimal speed in 60-67°C range
                 if (( avg_temp > MIN_TEMP && avg_temp < FAN_ACTIVATION_TEMP + 2 )); then
-                    OPTIMAL_PWM=$(( (OPTIMAL_PWM + speed) / 2 ))  # Moving average
+                    OPTIMAL_PWM=$(( (OPTIMAL_PWM + speed) / 2 ))
                     echo "$OPTIMAL_PWM" > "${OPTIMAL_PWM_FILE}.tmp"
                     mv "${OPTIMAL_PWM_FILE}.tmp" "$OPTIMAL_PWM_FILE"
+                    logger -t fan-control "ADJUSTED OPTIMAL PWM: ${OPTIMAL_PWM} (previous: $(( (OPTIMAL_PWM*2 - speed) )) )"
                 fi
             fi
             ;;
@@ -149,12 +163,14 @@ update_fan_state() {
 # Main execution flow
 initialize_optimal_pwm
 initial_temp=$(get_smoothed_temp)
+logger -t fan-control "Service starting | Initial temp: ${initial_temp}℃ | Optimal PWM: ${OPTIMAL_PWM}"
 
-# Cold-start decision
 if (( initial_temp >= FAN_ACTIVATION_TEMP )); then
+    logger -t fan-control "HOT START: Beginning in LINEAR state"
     CURRENT_STATE=$STATE_LINEAR
     set_fan_speed $OPTIMAL_PWM
 else
+    logger -t fan-control "COLD START: Beginning in OFF state"
     set_fan_speed 0
 fi
 

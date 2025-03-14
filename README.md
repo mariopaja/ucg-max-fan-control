@@ -48,8 +48,14 @@ systemctl restart fan-control.service
 
 ## Verify
 ```bash
-# Check service
-systemctl status fan-control.service
+# Follow live logs
+journalctl -u fan-control.service -f
+
+# Show last 50 entries
+journalctl -u fan-control.service -n 50
+
+# Filter by priority
+journalctl -u fan-control.service -p info
 ```
 
 ## Credits
