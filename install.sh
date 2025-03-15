@@ -7,11 +7,12 @@ mkdir -p /data/fan-control
 # Install fan control script
 cat > /data/fan-control/fan-control.sh <<'EOF'
 #!/bin/bash
+#!/bin/bash
 ###############################################################################
 # UCG-Max Intelligent Fan Controller
 #
 # Features:
-# - Three operational states (OFF/TAPER/LINEAR)
+# - Three operational states (OFF/TAPER/ACTIVE)
 # - Configurable through /data/fan-control/config
 # - Safe speed transitions and error resilience
 # - Systemd service integration
@@ -83,6 +84,7 @@ TAPER_START=0
 LAST_PWM=-1
 SMOOTHED_TEMP=50
 LAST_ADJUSTMENT=0
+LAST_AVG_TEMP=0  # Track temperature for deadband calculations
 
 SMOOTHED_TEMP=$(ubnt-systool cputemp | awk '{print int($1)}' || echo 50)
 logger -t fan-control "INIT: Raw=${SMOOTHED_TEMP}℃ | Starting smooth_temp=${SMOOTHED_TEMP}℃"
@@ -131,10 +133,15 @@ set_fan_speed() {
         new_speed=$(( LAST_PWM - MAX_PWM_STEP ))
     fi
 
+    # Enforce absolute MIN/MAX limits
+    new_speed=$(( new_speed > MAX_PWM ? MAX_PWM : new_speed ))
+    new_speed=$(( new_speed < MIN_PWM ? MIN_PWM : new_speed ))
+
     if [[ "$new_speed" -ne "$LAST_PWM" ]]; then
         echo "$new_speed" > "$FAN_PWM_DEVICE"
         logger -t fan-control "SET: ${LAST_PWM}→${new_speed}pwm | Reason: ${reason}"
         LAST_PWM=$new_speed
+        LAST_AVG_TEMP=$current_temp  # Reset deadband tracking on change
 
         if (( CURRENT_STATE == STATE_ACTIVE )); then
             local now=$(date +%s)
@@ -143,14 +150,17 @@ set_fan_speed() {
                 local original_optimal=$optimal
                 local adjustment=""
 
-                (( new_speed < optimal )) && {
-                    adjustment="-$LEARNING_RATE (current ${new_speed}pwm < optimal ${original_optimal}pwm)"
-                    optimal=$(( optimal - LEARNING_RATE ))
-                }
-                (( new_speed > optimal )) && {
-                    adjustment="+$LEARNING_RATE (current ${new_speed}pwm > optimal ${optimal}pwm)"
-                    optimal=$(( optimal + LEARNING_RATE ))
-                }
+                # Only adjust optimal PWM if we're at target speed
+                if (( new_speed == optimal )); then
+                    (( current_temp > MIN_TEMP )) && {
+                        adjustment="+$LEARNING_RATE (optimal at temp ${current_temp}℃)"
+                        optimal=$(( optimal + LEARNING_RATE ))
+                    }
+                    (( current_temp < MIN_TEMP )) && {
+                        adjustment="-$LEARNING_RATE (optimal at temp ${current_temp}℃)"
+                        optimal=$(( optimal - LEARNING_RATE ))
+                    }
+                fi
 
                 if [[ -n "$adjustment" ]]; then
                     optimal=$(( optimal > MAX_PWM ? MAX_PWM : optimal ))
@@ -173,7 +183,7 @@ update_fan_state() {
     case $CURRENT_STATE in
         $STATE_OFF)
             if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
-                state_transition="OFF→LINEAR (${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP}℃)"
+                state_transition="OFF→ACTIVE (${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP}℃)"
                 CURRENT_STATE=$STATE_ACTIVE
                 set_fan_speed $(< "$OPTIMAL_PWM_FILE")
             fi
@@ -181,7 +191,7 @@ update_fan_state() {
 
         $STATE_TAPER)
             if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
-                state_transition="TAPER→LINEAR (${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP}℃)"
+                state_transition="TAPER→ACTIVE (${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP}℃)"
                 CURRENT_STATE=$STATE_ACTIVE
                 set_fan_speed $(< "$OPTIMAL_PWM_FILE")
             elif (( now - TAPER_START >= TAPER_DURATION )); then
@@ -197,21 +207,25 @@ update_fan_state() {
 
         $STATE_ACTIVE)
             if (( avg_temp <= MIN_TEMP )); then
-                state_transition="LINEAR→TAPER (${avg_temp}℃ ≤ ${MIN_TEMP}℃)"
+                state_transition="ACTIVE→TAPER (${avg_temp}℃ ≤ ${MIN_TEMP}℃)"
                 CURRENT_STATE=$STATE_TAPER
                 TAPER_START=$now
                 set_fan_speed $MIN_PWM
             else
-                declare -g last_avg  # Global variable
-                last_avg=${last_avg:-0}  # Initialize if not set
-                local temp_delta=$(( avg_temp - last_avg ))
+                local temp_delta=$(( avg_temp - LAST_AVG_TEMP ))
                 if (( ${temp_delta#-} > DEADBAND )); then
                     logger -t fan-control "DEADBAND:  DELTA=${temp_delta}℃ | THRESHOLD=${DEADBAND}℃"
                     local speed=$(calculate_speed $avg_temp)
                     set_fan_speed $speed
-                    last_avg=$avg_temp
                 else
-                    logger -t fan-control "DEADBAND:  No change | DELTA=${temp_delta}℃"
+                    # Force adjustment if we're below target PWM
+                    local target_speed=$(calculate_speed $avg_temp)
+                    if (( LAST_PWM < target_speed )); then
+                        logger -t fan-control "DEADBAND:  Forcing adjustment (current ${LAST_PWM}pwm < target ${target_speed}pwm)"
+                        set_fan_speed $target_speed
+                    else
+                        logger -t fan-control "DEADBAND:  No change | DELTA=${temp_delta}℃"
+                    fi
                 fi
             fi
             ;;
