@@ -53,12 +53,26 @@ TAPER_DURATION=$((TAPER_MINS * 60))
 
 # Single instance check
 PID_FILE="/var/run/fan-control.pid"
+MAX_AGE=60  # Seconds since last PID update
+
+# Check for existing process
 if [[ -f "$PID_FILE" ]]; then
-    logger -t fan-control "ALERT: Service conflict - existing PID $(cat "$PID_FILE")"
-    exit 1
+    existing_pid=$(cat "$PID_FILE")
+    if ps -p "$existing_pid" >/dev/null 2>&1; then
+        logger -t fan-control "ALERT: Active service found (PID $existing_pid)"
+        exit 1
+    else
+        logger -t fan-control "CLEANUP: Removing stale PID $existing_pid"
+        rm -f "$PID_FILE"
+    fi
 fi
-echo $$ > "$PID_FILE"
-trap 'rm -f "$PID_FILE"; logger -t fan-control "Service shutdown complete"' EXIT
+
+# Create PID file with atomic lock
+(
+    flock -x 200
+    echo $$ > "$PID_FILE"
+    trap 'rm -f "$PID_FILE"; exit' EXIT INT TERM
+) 200>"$PID_FILE"
 
 ###[ CORE FUNCTIONALITY ]######################################################
 STATE_OFF=0
