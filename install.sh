@@ -33,8 +33,8 @@ TAPER_MINS=90          # Cool-down duration (minutes)
 FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1"
 OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm"
 MAX_PWM_STEP=25        # Max PWM change per adjustment
-DEADBAND=2             # Temp stability threshold (°C)
-ALPHA=75               # Smoothing factor (0-100)
+DEADBAND=1             # Temp stability threshold (°C)
+ALPHA=50               # Smoothing factor (0-100)
 LEARNING_RATE=5        # PWM optimization step size
 DEFAULTS
     source "$CONFIG_FILE"
@@ -89,7 +89,7 @@ calculate_speed() {
     local temp_diff=$((avg_temp - FAN_ACTIVATION_TEMP))
 
     (( temp_range > 0 )) || temp_range=1
-    local speed=$(( (temp_diff * temp_diff * (MAX_PWM - MIN_PWM)) / (temp_range * temp_range) ))
+    local speed=$(( (temp_diff * temp_diff * (MAX_PWM - MIN_PWM) * 12) / (temp_range * temp_range * 10) ))
     speed=$(( speed + MIN_PWM ))
     speed=$(( speed > MAX_PWM ? MAX_PWM : speed ))
 
