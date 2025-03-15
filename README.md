@@ -23,9 +23,9 @@ curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/in
 Edit `/data/fan-control/config`:
 ```bash
 # Core Thresholds
-MIN_TEMP=60       # Base activation threshold (°C)
-MAX_TEMP=85       # Emergency threshold (°C)
-HYSTERESIS=5      # Temperature buffer (°C)
+MIN_TEMP=60            # Base threshold (°C)
+MAX_TEMP=85            # Critical temperature (°C)
+HYSTERESIS=5           # Temperature buffer (°C)
 
 # Fan Behavior
 MIN_PWM=91        # Minimum active speed (0-255)
@@ -33,11 +33,15 @@ MAX_PWM=255       # Maximum speed (0-255)
 MAX_PWM_STEP=25   # Maximum speed change per adjustment
 
 # Advanced Tuning
-DEADBAND=2        # Temperature stability threshold (°C)
-ALPHA=75          # Smoothing factor (0-100 raw→smooth)
+ALPHA=40          # Smoothing factor, lower values make the fan curve more aggressive and vice versa (0-100 raw→smooth)
+DEADBAND=1        # Temperature stability threshold (°C)
 LEARNING_RATE=5   # Hourly PWM optimization step size
 TAPER_MINS=90     # Cool-down duration (minutes)
 CHECK_INTERVAL=15 # Temperature check frequency (seconds)
+
+# You probably shouldn't touch this
+FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1"
+OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm"
 ```
 
 Apply changes:

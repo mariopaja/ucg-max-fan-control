@@ -35,7 +35,7 @@ FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1"
 OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm"
 MAX_PWM_STEP=25        # Max PWM change per adjustment
 DEADBAND=1             # Temp stability threshold (°C)
-ALPHA=40               # Smoothing factor (0-100)
+ALPHA=40               # Smoothing factor, lower values make the fan curve more aggressive and vice versa (0-100)
 LEARNING_RATE=5        # PWM optimization step size
 DEFAULTS
     source "$CONFIG_FILE"
