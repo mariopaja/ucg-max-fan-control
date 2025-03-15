@@ -35,7 +35,7 @@ FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1"
 OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm"
 MAX_PWM_STEP=25        # Max PWM change per adjustment
 DEADBAND=1             # Temp stability threshold (°C)
-ALPHA=50               # Smoothing factor (0-100)
+ALPHA=40               # Smoothing factor (0-100)
 LEARNING_RATE=5        # PWM optimization step size
 DEFAULTS
     source "$CONFIG_FILE"
@@ -125,17 +125,24 @@ set_fan_speed() {
         reason="EMERGENCY: Temp ${current_temp}℃ ≥ ${MAX_TEMP}℃"
     fi
 
-    if (( new_speed > LAST_PWM + MAX_PWM_STEP )); then
-        reason="Ramp-up limited: ${LAST_PWM}→$((LAST_PWM + MAX_PWM_STEP))pwm"
-        new_speed=$(( LAST_PWM + MAX_PWM_STEP ))
-    elif (( new_speed < LAST_PWM - MAX_PWM_STEP )); then
-        reason="Ramp-down limited: ${LAST_PWM}→$((LAST_PWM - MAX_PWM_STEP))pwm"
-        new_speed=$(( LAST_PWM - MAX_PWM_STEP ))
-    fi
+    # Special handling for OFF state
+    if (( CURRENT_STATE == STATE_OFF )); then
+        new_speed=0  # Force 0 PWM regardless of other logic
+        reason="OFF state override"
+    else
+        # Apply ramp limits only in non-OFF states
+        if (( new_speed > LAST_PWM + MAX_PWM_STEP )); then
+            reason="Ramp-up limited: ${LAST_PWM}→$((LAST_PWM + MAX_PWM_STEP))pwm"
+            new_speed=$(( LAST_PWM + MAX_PWM_STEP ))
+        elif (( new_speed < LAST_PWM - MAX_PWM_STEP )); then
+            reason="Ramp-down limited: ${LAST_PWM}→$((LAST_PWM - MAX_PWM_STEP))pwm"
+            new_speed=$(( LAST_PWM - MAX_PWM_STEP ))
+        fi
 
-    # Enforce absolute MIN/MAX limits
-    new_speed=$(( new_speed > MAX_PWM ? MAX_PWM : new_speed ))
-    new_speed=$(( new_speed < MIN_PWM ? MIN_PWM : new_speed ))
+        # Enforce MIN/MAX only in active states
+        new_speed=$(( new_speed > MAX_PWM ? MAX_PWM : new_speed ))
+        new_speed=$(( new_speed < MIN_PWM ? MIN_PWM : new_speed ))
+    fi
 
     if [[ "$new_speed" -ne "$LAST_PWM" ]]; then
         echo "$new_speed" > "$FAN_PWM_DEVICE"
