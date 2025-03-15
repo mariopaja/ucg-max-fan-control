@@ -306,6 +306,8 @@ Type=simple
 ExecStart=/data/fan-control/fan-control.sh
 Restart=always
 RestartSec=5
+LogRateLimitIntervalSec=86400  # 24h window
+LogRateLimitBurst=10000       # Allow 10k logs/day
 
 [Install]
 WantedBy=multi-user.target
