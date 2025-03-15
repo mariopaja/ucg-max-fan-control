@@ -105,7 +105,7 @@ calculate_speed() {
     local temp_diff=$((avg_temp - FAN_ACTIVATION_TEMP))
 
     (( temp_range > 0 )) || temp_range=1
-    local speed=$(( (temp_diff * temp_diff * (MAX_PWM - MIN_PWM) * 12) / (temp_range * temp_range * 10) ))
+    local speed=$(( (temp_diff * temp_diff * (MAX_PWM - MIN_PWM) * 15) / (temp_range * temp_range * 10) ))
     speed=$(( speed + MIN_PWM ))
     speed=$(( speed > MAX_PWM ? MAX_PWM : speed ))
 
