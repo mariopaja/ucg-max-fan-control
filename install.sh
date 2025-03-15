@@ -24,7 +24,7 @@ CONFIG_FILE="/data/fan-control/config"
 # Load defaults if config missing
 source "$CONFIG_FILE" 2>/dev/null || {
     cat > "$CONFIG_FILE" <<-DEFAULTS
-MIN_PWM=55             # Minimum active fan speed (0-255)
+MIN_PWM=91             # Minimum active fan speed (0-255)
 MAX_PWM=255            # Maximum fan speed (0-255)
 MIN_TEMP=60            # Base threshold (°C)
 MAX_TEMP=85            # Critical temperature (°C)

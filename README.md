@@ -28,7 +28,7 @@ MAX_TEMP=85       # Emergency threshold (°C)
 HYSTERESIS=5      # Temperature buffer (°C)
 
 # Fan Behavior
-MIN_PWM=55        # Minimum active speed (0-255)
+MIN_PWM=91        # Minimum active speed (0-255)
 MAX_PWM=255       # Maximum speed (0-255)
 MAX_PWM_STEP=25   # Maximum speed change per adjustment
 
