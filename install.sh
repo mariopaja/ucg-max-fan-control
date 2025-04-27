@@ -31,24 +31,7 @@ echo "Installing from branch: $BRANCH"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Ensure en_US.UTF-8 is available BEFORE trying to use it
-if ! locale -a | grep -iq 'en_US.utf8'; then
-    echo "Generating en_US.UTF-8 locale..."
-    if command -v locale-gen >/dev/null 2>&1; then
-        locale-gen en_US.UTF-8
-        update-locale LANG=en_US.UTF-8
-    elif [ -f /etc/locale.gen ]; then
-        # Fallback for some Debian systems
-        sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen
-        locale-gen
-        update-locale LANG=en_US.UTF-8
-    else
-        echo "Warning: Cannot generate locale automatically."
-        echo "Character encoding may have issues in logs."
-    fi
-else
-    echo "Locale en_US.UTF-8 is already installed."
-fi
-
+locale-gen en_US.UTF-8
 echo "Locale configuration complete."
 
 # Create directory for fan control
