@@ -30,7 +30,7 @@ echo "Installing from branch: $BRANCH"
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Ensure en_US.UTF-8 is available
+# Generate locale if missing
 if ! locale -a | grep -q 'en_US.utf8'; then
   echo "Generating en_US.UTF-8 locale..."
   if command -v locale-gen >/dev/null 2>&1; then
@@ -50,10 +50,6 @@ else
 fi
 
 echo "Locale configuration complete."
-
-# Optionally export for this shell
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
 
 # Create directory for fan control
 mkdir -p /data/fan-control || {
