@@ -48,6 +48,14 @@ LEARNING_RATE=$DEFAULT_LEARNING_RATE        # PWM optimization step size
 DEFAULTS
 fi
 
+if locale -a | grep -q 'en_US.utf8'; then
+  export LANG=en_US.UTF-8
+  export LC_ALL=en_US.UTF-8
+else
+  export LANG=C.UTF-8
+  export LC_ALL=C.UTF-8
+fi
+
 # Source the config file
 source "$CONFIG_FILE" 2>/dev/null
 
