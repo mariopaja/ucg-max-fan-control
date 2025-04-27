@@ -3,30 +3,6 @@
 # UCG-Max/Fibre Intelligent Fan Controller
 ###############################################################################
 
-# Set locale at runtime - try en_US.UTF-8 first, fall back to C.UTF-8 or C
-if locale -a 2>/dev/null | grep -iq 'en_US.utf8'; then
-    export LANG=en_US.UTF-8
-    export LC_ALL=en_US.UTF-8
-elif locale -a 2>/dev/null | grep -iq 'C.utf8'; then
-    export LANG=C.UTF-8
-    export LC_ALL=C.UTF-8
-else
-    # Fallback to plain C if nothing else works
-    export LANG=C
-    export LC_ALL=C
-    # Define safe version of logging that avoids UTF-8
-    safer_log() {
-        # Replace celsius with plain "C" for safer logging
-        local msg="$1"
-        msg="${msg//℃/C}"
-        logger -t fan-control "$msg"
-    }
-    # Override the normal logger function
-    logger() {
-        safer_log "$2"
-    }
-fi
-
 ###[ CONFIGURATION ]###########################################################
 CONFIG_FILE="/data/fan-control/config"
 TEMP_STATE_FILE="/data/fan-control/temp_state"
@@ -66,6 +42,13 @@ LEARNING_RATE=$DEFAULT_LEARNING_RATE        # PWM optimization step size
 DEFAULTS
 fi
 
+if locale -a | grep -q 'en_US.utf8'; then
+  export LANG=en_US.UTF-8
+  export LC_ALL=en_US.UTF-8
+else
+  export LANG=C.UTF-8
+  export LC_ALL=C.UTF-8
+fi
 
 # Source the config file
 source "$CONFIG_FILE" 2>/dev/null
