@@ -62,6 +62,7 @@ HYSTERESIS=5           # Temperature buffer (°C)
 MIN_PWM=91        # Minimum active speed (0-255)
 MAX_PWM=255       # Maximum speed (0-255)
 MAX_PWM_STEP=25   # Maximum speed change per adjustment
+                  # Note: Due to hardware limitations, actual PWM values may vary slightly from requested values
 
 # Advanced Tuning
 ALPHA=20          # Smoothing factor, lower values make the smoothed temp follow raw temp more closely (0-100 raw→smooth)
@@ -126,21 +127,21 @@ journalctl -u fan-control.service --since "10 minutes ago"  # Recent history
 
 ## Technical Implementation
 - **Quadratic Response Curve**:
-  ```math
-  PWM = MIN_PWM + ((temp_diff² × (MAX_PWM - MIN_PWM)) / temp_range²)
-  ```
+  $$PWM = MIN\_PWM + ((temp\_diff^2 \times (MAX\_PWM - MIN\_PWM)) / temp\_range^2)$$
   Where:  
   `temp_diff = current_temp - activation_temp`  
   `temp_range = MAX_TEMP - activation_temp`
 
 - **Exponential Smoothing**:
-  ```math
-  smoothed_temp = (α × previous_smooth) + ((100 - α) × raw_temp) / 100
-  ```
+  $$smoothed\_temp = (\alpha \times previous\_smooth) + ((100 - \alpha) \times raw\_temp) / 100$$
   (α configured via ALPHA parameter)
 
 - **Adaptive Learning**:  
   Hourly adjusts optimal PWM based on thermal performance history
+
+- **Hardware PWM Limitations**:  
+  Due to device hardware limitations, the actual PWM values applied may differ from the requested values
+  (e.g., setting 50 might result in ~48, or 100 might result in ~92)
 
 ## Maintenance
 ```bash

@@ -258,6 +258,8 @@ set_fan_speed() {
     fi
 
     if [[ "$new_speed" -ne "$LAST_PWM" ]]; then
+        # Note: Due to hardware limitations, the actual PWM value applied may differ from the requested value
+        # (e.g., setting 50 might result in ~48, or 100 might result in ~92)
         echo "$new_speed" > "$FAN_PWM_DEVICE"
         logger -t fan-control "SET: ${LAST_PWM}→${new_speed}pwm | Reason: ${reason}"
         LAST_PWM=$new_speed
