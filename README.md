@@ -1,6 +1,6 @@
-# UCG-Max Intelligent Fan Control
+# UCG-Max/Fibre Intelligent Fan Control
 
-Advanced temperature management for Ubiquiti UCG-Max devices running UniFi OS 4+
+Advanced temperature management for Ubiquiti UCG-Max/Fibre devices running UniFi OS 4+
 
 ## Features
 - 🎛️ **Four Operational States**: 
@@ -16,7 +16,38 @@ Advanced temperature management for Ubiquiti UCG-Max devices running UniFi OS 4+
 
 ## Installation
 ```bash
-curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/install.sh | sudo bash
+```
+
+### Using a Different Branch
+If you want to install from a specific branch (e.g., for testing new features):
+
+**Method 1: Direct URL**
+```bash
+# Replace 'dev' with your desired branch name
+curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/dev/install.sh | sudo bash
+```
+
+**Method 2: Environment Variable**
+```bash
+# Set the branch name via environment variable
+FAN_CONTROL_BRANCH=dev curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/install.sh | sudo bash
+```
+
+### Manual Installation
+If you prefer to inspect the code before installation:
+```bash
+# Clone the repository
+git clone https://github.com/iceteaSA/ucg-max-fan-control.git
+cd ucg-max-fan-control
+
+# Optionally checkout a specific branch
+# git checkout dev
+
+# Run the installer (you can also use FAN_CONTROL_BRANCH to override the branch)
+sudo ./install.sh
+# Or with a specific branch:
+# sudo FAN_CONTROL_BRANCH=dev ./install.sh
 ```
 
 ## Configuration
@@ -33,7 +64,7 @@ MAX_PWM=255       # Maximum speed (0-255)
 MAX_PWM_STEP=25   # Maximum speed change per adjustment
 
 # Advanced Tuning
-ALPHA=40          # Smoothing factor, lower values make the fan curve more aggressive and vice versa (0-100 raw→smooth)
+ALPHA=20          # Smoothing factor, lower values make the smoothed temp follow raw temp more closely (0-100 raw→smooth)
 DEADBAND=1        # Temperature stability threshold (°C)
 LEARNING_RATE=5   # Hourly PWM optimization step size
 TAPER_MINS=90     # Cool-down duration (minutes)
@@ -43,6 +74,8 @@ CHECK_INTERVAL=15 # Temperature check frequency (seconds)
 FAN_PWM_DEVICE="/sys/class/hwmon/hwmon0/pwm1"
 OPTIMAL_PWM_FILE="/data/fan-control/optimal_pwm"
 ```
+
+> **Note**: The script automatically checks for missing configuration parameters and adds them with default values if they're not present in the config file. This ensures that all required parameters are always available, even if you've edited the config file manually.
 
 Apply changes:
 ```bash
@@ -75,6 +108,11 @@ SET: 55→80pwm | Reason: Ramp-up limited: 55→80pwm
 
 # Learning System
 LEARNING: 80→75pwm (-5 current 75pwm < optimal 80pwm)
+
+# Configuration Management
+CONFIG: Missing parameter detected: CHECK_INTERVAL
+CONFIG: Updating configuration file with 1 missing parameters
+CONFIG: Configuration file updated successfully
 
 # System Status
 STATUS: State=ACTIVE | PWM=120 | Temp=72℃
@@ -113,6 +151,14 @@ systemctl restart fan-control.service  # Apply config changes
 # Full Removal
 /data/fan-control/uninstall.sh
 ```
+
+## Project Structure
+- **fan-control.sh**: The main script that monitors temperature and controls fan speed
+- **install.sh**: Installation script that copies files and sets up the systemd service
+  - Supports installation from different branches via the `FAN_CONTROL_BRANCH` environment variable
+  - Automatically downloads required files if not found locally
+- **uninstall.sh**: Script to remove the fan control system
+- **fan-control.service**: Systemd service configuration
 
 ## Credits & Acknowledgments
 - **Thermal Research**: [UCG-Max Thermal Thread](https://www.reddit.com/r/Ubiquiti/comments/1fr8xyt/)
