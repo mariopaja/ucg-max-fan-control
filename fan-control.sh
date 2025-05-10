@@ -446,7 +446,7 @@ update_fan_state() {
             $STATE_EMERGENCY)
                 # Exit emergency mode only when temperature drops significantly below MAX_TEMP
                 if (( avg_temp <= MAX_TEMP - HYSTERESIS )); then
-                    state_transition="EMERGENCY→ACTIVE (${avg_temp}℃ ≤ ${MAX_TEMP - HYSTERESIS}℃)"
+                    state_transition="EMERGENCY→ACTIVE (${avg_temp}℃ ≤ $((MAX_TEMP - HYSTERESIS))℃)"
                     CURRENT_STATE=$STATE_ACTIVE
                     set_fan_speed $(calculate_speed $avg_temp)
                 else
@@ -459,15 +459,15 @@ update_fan_state() {
                 if (( avg_temp >= FAN_ACTIVATION_TEMP )); then
                     state_transition="OFF→ACTIVE (${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP}℃)"
                     CURRENT_STATE=$STATE_ACTIVE
-                    set_fan_speed $(< "$OPTIMAL_PWM_FILE")
+                    set_fan_speed $OPTIMAL_PWM
                 fi
                 ;;
 
             $STATE_TAPER)
                 if (( avg_temp >= FAN_ACTIVATION_TEMP + 2 )); then  # Added 2°C buffer to prevent oscillation
-                    state_transition="TAPER→ACTIVE (${avg_temp}℃ ≥ ${FAN_ACTIVATION_TEMP + 2}℃)"
+                    state_transition="TAPER→ACTIVE (${avg_temp}℃ ≥ $((FAN_ACTIVATION_TEMP + 2))℃)"
                     CURRENT_STATE=$STATE_ACTIVE
-                    set_fan_speed $(< "$OPTIMAL_PWM_FILE")
+                    set_fan_speed $OPTIMAL_PWM
                 elif (( now - TAPER_START >= TAPER_DURATION )); then
                     state_transition="TAPER→OFF (${TAPER_MINS}min elapsed)"
                     CURRENT_STATE=$STATE_OFF
