@@ -30,10 +30,6 @@ echo "Installing from branch: $BRANCH"
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Ensure en_US.UTF-8 is available BEFORE trying to use it
-locale-gen en_US.UTF-8
-echo "Locale configuration complete."
-
 # Create directory for fan control
 mkdir -p /data/fan-control || {
     echo "Error: Failed to create directory /data/fan-control"

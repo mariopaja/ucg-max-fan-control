@@ -63,13 +63,6 @@ DEFAULTS
     fi
 fi
 
-if locale -a | grep -q 'en_US.utf8'; then
-  export LANG=en_US.UTF-8
-  export LC_ALL=en_US.UTF-8
-else
-  export LANG=C.UTF-8
-  export LC_ALL=C.UTF-8
-fi
 
 # Source the config file
 source "$CONFIG_FILE" 2>/dev/null
@@ -349,7 +342,8 @@ get_smoothed_temp() {
     # Calculate new smoothed temperature using exponential smoothing formula:
     # smoothed_temp = (α × previous_smooth + (100 - α) × raw_temp) / 100
     # where α (ALPHA) controls how much weight to give to previous vs. new readings
-    SMOOTHED_TEMP=$(( (ALPHA * SMOOTHED_TEMP + (100 - ALPHA) * raw_temp ) / 100 ))
+    # Use awk for floating-point arithmetic to prevent drift from integer rounding
+    SMOOTHED_TEMP=$(awk "BEGIN { printf \"%.0f\", ($ALPHA * $SMOOTHED_TEMP + (100 - $ALPHA) * $raw_temp) / 100 }")
 
     # Safety check: If raw and smoothed temps differ by more than 20°C, reset smoothed temp
     local temp_diff=$((raw_temp - SMOOTHED_TEMP))
