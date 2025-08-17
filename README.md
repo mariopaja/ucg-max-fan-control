@@ -30,20 +30,20 @@ If you want to install from a specific branch (e.g., for testing new features):
 **Method 1: Direct URL**
 ```bash
 # Replace 'dev' with your desired branch name
-curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/dev/install.sh | sudo bash
+curl -sSL https://raw.githubusercontent.com/mariopaja/ucg-max-fan-control/dev/install.sh | sudo bash
 ```
 
 **Method 2: Environment Variable**
 ```bash
 # Set the branch name via environment variable
-FAN_CONTROL_BRANCH=dev curl -sSL https://raw.githubusercontent.com/iceteaSA/ucg-max-fan-control/main/install.sh | sudo bash
+FAN_CONTROL_BRANCH=dev curl -sSL https://raw.githubusercontent.com/mariopaja/ucg-max-fan-control/main/install.sh | sudo bash
 ```
 
 ### Manual Installation
 If you prefer to inspect the code before installation:
 ```bash
 # Clone the repository
-git clone https://github.com/iceteaSA/ucg-max-fan-control.git
+git clone https://github.com/mariopaja/ucg-max-fan-control.git
 cd ucg-max-fan-control
 
 # Optionally checkout a specific branch
