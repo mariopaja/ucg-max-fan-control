@@ -10,8 +10,8 @@ TEMP_STATE_FILE="/data/fan-control/temp_state"
 # Define default configuration values
 DEFAULT_MIN_PWM=91             # Minimum active fan speed (0-255)
 DEFAULT_MAX_PWM=255            # Maximum fan speed (0-255)
-DEFAULT_MIN_TEMP=60            # Base threshold (°C)
-DEFAULT_MAX_TEMP=85            # Critical temperature (°C)
+DEFAULT_MIN_TEMP=40            # Base threshold (°C)
+DEFAULT_MAX_TEMP=70            # Critical temperature (°C)
 DEFAULT_HYSTERESIS=5           # Temperature buffer (°C)
 DEFAULT_CHECK_INTERVAL=15      # Base check interval (seconds)
 DEFAULT_TAPER_MINS=90          # Cool-down duration (minutes)
